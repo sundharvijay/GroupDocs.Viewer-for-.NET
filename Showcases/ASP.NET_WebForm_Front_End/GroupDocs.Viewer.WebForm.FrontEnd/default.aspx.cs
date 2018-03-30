@@ -54,8 +54,7 @@ namespace GroupDocs.Viewer.WebForm.FrontEnd
             var imageConfig = new ViewerConfig
             {
                 StoragePath = _storagePath, 
-                UseCache = true,
-                UsePdf = true
+                UseCache = true, 
             };
             _imageHandler = new ViewerImageHandler(imageConfig);
 
@@ -228,15 +227,21 @@ namespace GroupDocs.Viewer.WebForm.FrontEnd
         {
             if (string.IsNullOrWhiteSpace(request.WatermarkText))
                 return null;
+            string hexString = request.WatermarkColor.ToString();
+
+            int red = int.Parse(hexString.Substring(1, 2), NumberStyles.HexNumber);
+            int green = int.Parse(hexString.Substring(3, 2), NumberStyles.HexNumber);
+            int blue = int.Parse(hexString.Substring(5, 2), NumberStyles.HexNumber);
 
             return new Watermark(request.WatermarkText)
             {
                 Color = request.WatermarkColor.HasValue
-                    ? Color.FromArgb(request.WatermarkColor.Value)
+                    ? Color.FromArgb(red,green,blue)
                     : Color.Red,
                 Position = ToWatermarkPosition(request.WatermarkPosition),
-                Width = request.WatermarkWidth
-            };
+                Width = request.WatermarkWidth,
+
+            }; 
         }
 
         private static Watermark GetWatermark(GetFileParameters request)
@@ -475,10 +480,11 @@ namespace GroupDocs.Viewer.WebForm.FrontEnd
             };
 
 
-
+            HttpContext.Current.Session["watermark"] = GetWatermark(request);
             var htmlOptions = new HtmlOptions
             {
                 // IsResourcesEmbedded = Utils.IsImage(fileName),
+                Watermark=(Watermark)HttpContext.Current.Session["watermark"],
                 IsResourcesEmbedded = false,
                 HtmlResourcePrefix = string.Format("/GetResourceForHtml.aspx?documentPath={0}", fileName) + "&pageNumber={page-number}&resourceName=",
             };
@@ -510,7 +516,14 @@ namespace GroupDocs.Viewer.WebForm.FrontEnd
                 htmlPages.AddRange(attachmentPages);
 
             }
-            result.documentDescription = new FileDataJsonSerializer(fileData, new FileDataOptions()).Serialize(false);
+            SerializationOptions serializationOptions = new SerializationOptions
+            {
+                UsePdf = request.UsePdf,
+                SupportListOfBookmarks = request.SupportListOfBookmarks,
+                SupportListOfContentControls = request.SupportListOfContentControls
+            };
+            var documentInfoJson = new DocumentInfoJsonSerializer(docInfo, serializationOptions).Serialize();
+            result.documentDescription = documentInfoJson;
             result.docType = docInfo.DocumentType;
             result.fileType = docInfo.FileType;
             result.pageHtml = htmlPages.Select(_ => _.HtmlContent).ToArray();
@@ -554,6 +567,7 @@ namespace GroupDocs.Viewer.WebForm.FrontEnd
 
             var htmlOptions = new HtmlOptions
             {
+                Watermark = (Watermark)HttpContext.Current.Session["watermark"],
                 PageNumber = parameters.PageIndex + 1,
                 CountPagesToRender = 1,
                 IsResourcesEmbedded = false,
